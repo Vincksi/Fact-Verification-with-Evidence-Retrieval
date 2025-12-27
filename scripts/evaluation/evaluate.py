@@ -185,11 +185,11 @@ def main():
     # Build or load index
     if args.load_index:
         print("Loading pre-built index...")
-        pipeline.build_retriever()  # Initialize retriever
+        pipeline.build_retriever(build=False)  # Initialize retriever without building
         pipeline.load_index()
     else:
         print("Building retrieval index...")
-        pipeline.build_retriever()
+        pipeline.build_retriever(build=True)
     
     # Run evaluation
     if args.eval_mode in ['retrieval', 'both']:
