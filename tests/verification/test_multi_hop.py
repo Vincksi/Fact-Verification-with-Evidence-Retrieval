@@ -52,6 +52,7 @@ class TestMultiHopReasoner:
         mock_data.edge_index = torch.zeros((2, 2), dtype=torch.long)
         mock_data.num_nodes = 3
         mock_data.node_type = torch.tensor([0, 1, 2])
+        mock_data.edge_type = torch.zeros(2, dtype=torch.long)
         mock_data.node_texts = ["Claim", "Evidence", "Entity"]
         mock_builder.build_graph.return_value = mock_data
         
@@ -94,6 +95,7 @@ class TestMultiHopReasoner:
             mock_data.edge_index = torch.tensor([[0, 1], [1, 0]])
             mock_data.num_nodes = 2
             mock_data.node_type = torch.tensor([0, 1])
+            mock_data.edge_type = torch.zeros(2, dtype=torch.long)
             mb.return_value.build_graph.return_value = mock_data
             
             reasoner = MultiHopReasoner(hidden_dim=16)
