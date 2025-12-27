@@ -123,8 +123,8 @@ class NLIModel:
             # has minimal signal (>0.01%), consider it over neutral
             max_non_neutral = max(supports_conf, refutes_conf)
             
-            # If there's ANY non-trivial signal in SUPPORTS or REFUTES
-            if max_non_neutral > 0.0001:  # Extremely low threshold
+            # If there's enough non-trivial signal in SUPPORTS or REFUTES
+            if max_non_neutral > 0.1:  # Increased from 0.0001 to prevent excessive flipping
                 # Reassign to stronger non-neutral label
                 return "SUPPORTS" if supports_conf > refutes_conf else "REFUTES"
         

@@ -173,7 +173,7 @@ def main():
     parser.add_argument('--load-index', action='store_true',
                        help='Load pre-built index instead of building')
     parser.add_argument('--save-predictions', type=str, default=None,
-                       help='Path to save predictions JSON')
+                       help='Path to save predictions JSON (e.g. reports/metrics/predictions.json)')
     
     args = parser.parse_args()
     
@@ -213,10 +213,13 @@ def main():
                     'retrieved_doc_ids': [doc.doc_id for doc in r.retrieved_docs]
                 })
             
-            with open(args.save_predictions, 'w') as f:
+            save_path = Path(args.save_predictions)
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(save_path, 'w') as f:
                 json.dump(predictions, f, indent=2)
             
-            print(f"\nPredictions saved to {args.save_predictions}")
+            print(f"\nPredictions saved to {save_path}")
     
     print(f"\n{'=' * 70}")
     print("Evaluation complete!")

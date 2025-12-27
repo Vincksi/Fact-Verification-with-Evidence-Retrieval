@@ -30,12 +30,16 @@ def main():
     
     # 2. Ensure MultiHopReasoner is initialized
     gnn_config = pipeline.config['multi_hop']['gnn']
+    # Use standard model for training node features to avoid ONNX loading issues
+    dense_model = "sentence-transformers/all-MiniLM-L6-v2"
+    
     pipeline.verifier = MultiHopReasoner(
-        embedding_model=pipeline.config['retrieval']['dense_model'],
+        embedding_model=dense_model,
         hidden_dim=gnn_config['hidden_dim'],
         num_layers=gnn_config['num_layers'],
         num_heads=gnn_config['num_heads'],
         dropout=gnn_config['dropout'],
+        use_onnx=False,  # Don't use ONNX during training
         **pipeline.config['multi_hop']['graph']
     )
     pipeline.use_gnn = True

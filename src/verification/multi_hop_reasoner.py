@@ -16,7 +16,7 @@ from torch import nn
 import torch.nn.functional as F
 from sentence_transformers import SentenceTransformer
 from torch_geometric.data import Data
-from torch_geometric.nn import GATConv
+from torch_geometric.nn import GATv2Conv, LayerNorm
 
 
 class GraphBuilder:
@@ -226,7 +226,8 @@ class GNNEncoder(nn.Module):
                  hidden_dim: int = 256,
                  num_layers: int = 2,
                  num_heads: int = 4,
-                 dropout: float = 0.1):
+                 dropout: float = 0.1,
+                 edge_dim: Optional[int] = 32):
         """
         Initialize GNN encoder.
 
@@ -236,6 +237,7 @@ class GNNEncoder(nn.Module):
             num_layers: Number of GAT layers
             num_heads: Number of attention heads
             dropout: Dropout rate
+            edge_dim: Dimension of edge features
         """
         super().__init__()
 
@@ -247,28 +249,31 @@ class GNNEncoder(nn.Module):
 
         # GAT layers
         self.conv_layers = nn.ModuleList()
+        self.norm_layers = nn.ModuleList()
+        
         for i in range(num_layers):
-            if i == 0:
-                # First layer
-                self.conv_layers.append(
-                    GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, dropout=dropout)
+            self.conv_layers.append(
+                GATv2Conv(
+                    hidden_dim, 
+                    hidden_dim // num_heads, 
+                    heads=num_heads, 
+                    dropout=dropout,
+                    edge_dim=edge_dim
                 )
-            else:
-                # Subsequent layers
-                self.conv_layers.append(
-                    GATConv(hidden_dim, hidden_dim // num_heads, heads=num_heads, dropout=dropout)
-                )
+            )
+            self.norm_layers.append(LayerNorm(hidden_dim))
 
         # Output projection
         self.output_proj = nn.Linear(hidden_dim, hidden_dim)
 
-    def forward(self, x, edge_index, batch=None, return_attention=False):
+    def forward(self, x, edge_index, edge_attr=None, batch=None, return_attention=False):
         """
         Forward pass through GNN.
 
         Args:
             x: Node features [num_nodes, input_dim]
             edge_index: Graph connectivity [2, num_edges]
+            edge_attr: Edge features [num_edges, edge_dim]
             batch: Batch assignment for each node (for batched graphs)
             return_attention: Whether to return attention weights
 
@@ -284,21 +289,21 @@ class GNNEncoder(nn.Module):
         all_attentions = []
 
         # GAT layers
-        for i, conv in enumerate(self.conv_layers):
+        for i, (conv, norm) in enumerate(zip(self.conv_layers, self.norm_layers)):
             if return_attention:
-                x_new, (edge_idx, att_weights) = conv(x, edge_index, return_attention_weights=True)
+                x_new, (edge_idx, att_weights) = conv(x, edge_index, edge_attr=edge_attr, return_attention_weights=True)
                 all_attentions.append((edge_idx, att_weights))
             else:
-                x_new = conv(x, edge_index)
+                x_new = conv(x, edge_index, edge_attr=edge_attr)
 
-            x_new = F.elu(x_new)  # ELU activation for GAT
+            x_new = F.elu(x_new)
             x_new = F.dropout(x_new, p=self.dropout, training=self.training)
 
-            # Residual connection (if dimensions match)
-            if x.size(-1) == x_new.size(-1):
-                x = x + x_new
-            else:
-                x = x_new
+            # Residual connection
+            x = x + x_new
+            
+            # Layer Norm for stability on CPU
+            x = norm(x, batch)
 
         # Output projection
         x = self.output_proj(x)
@@ -351,18 +356,23 @@ class MultiHopReasoner(nn.Module):
         # Get embedding dimension from model
         input_dim = self.graph_builder.get_sentence_embedding_dimension()
 
+        # Edge type embeddings
+        self.edge_dim = 32
+        self.edge_embedding = nn.Embedding(3, self.edge_dim)  # 3 edge types
+
         # GNN encoder
         self.gnn = GNNEncoder(
             input_dim=input_dim,
             hidden_dim=hidden_dim,
             num_layers=num_layers,
             num_heads=num_heads,
-            dropout=dropout
+            dropout=dropout,
+            edge_dim=self.edge_dim
         )
 
-        # Classifier head
+        # Classifier head (using Claim + Evidence Mean pooling)
         self.classifier = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim * 2, hidden_dim),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_dim, num_classes)
@@ -381,15 +391,27 @@ class MultiHopReasoner(nn.Module):
         """
         # Build graph
         graph = self.graph_builder.build_graph(claim, evidence_sentences)
+        
+        # Get edge embeddings
+        edge_attr = self.edge_embedding(graph.edge_type) if graph.edge_index.size(1) > 0 else None
 
         # Run GNN
-        node_embeddings = self.gnn(graph.x, graph.edge_index)
+        node_embeddings = self.gnn(graph.x, graph.edge_index, edge_attr=edge_attr)
 
-        # Get claim node embedding (node 0)
+        # Combine claim embedding (node 0) with evidence pooling
         claim_embedding = node_embeddings[0]
+        
+        # Mean pooling of evidence nodes (type 1)
+        evidence_mask = (graph.node_type == 1)
+        if evidence_mask.any():
+            evidence_embedding = node_embeddings[evidence_mask].mean(dim=0)
+        else:
+            evidence_embedding = torch.zeros_like(claim_embedding)
+            
+        combined = torch.cat([claim_embedding, evidence_embedding], dim=-1)
 
         # Classify
-        logits = self.classifier(claim_embedding)
+        logits = self.classifier(combined)
 
         return logits
 
@@ -412,15 +434,27 @@ class MultiHopReasoner(nn.Module):
         with torch.no_grad():
             # Build graph
             graph = self.graph_builder.build_graph(claim, evidence_sentences)
+            
+            # Get edge embeddings
+            edge_attr = self.edge_embedding(graph.edge_type) if graph.edge_index.size(1) > 0 else None
 
             # Run GNN with attention
-            node_embeddings, attentions = self.gnn(graph.x, graph.edge_index, return_attention=True)
+            node_embeddings, attentions = self.gnn(graph.x, graph.edge_index, edge_attr=edge_attr, return_attention=True)
 
-            # Get claim node embedding (node 0)
+            # Combine claim embedding (node 0) with evidence pooling
             claim_embedding = node_embeddings[0]
+            
+            # Mean pooling of evidence nodes (type 1)
+            evidence_mask = (graph.node_type == 1)
+            if evidence_mask.any():
+                evidence_embedding = node_embeddings[evidence_mask].mean(dim=0)
+            else:
+                evidence_embedding = torch.zeros_like(claim_embedding)
+                
+            combined = torch.cat([claim_embedding, evidence_embedding], dim=-1)
 
             # Classify
-            logits = self.classifier(claim_embedding)
+            logits = self.classifier(combined)
             probs = F.softmax(logits, dim=-1)
 
             pred_idx = torch.argmax(probs).item()
@@ -549,6 +583,7 @@ class MultiHopReasoner(nn.Module):
                 'num_layers': self.gnn.num_layers,
                 'num_heads': self.gnn.conv_layers[0].heads,
                 'dropout': self.gnn.dropout,
+                'edge_dim': self.edge_dim,
                 'graph_config': {
                     'sentence_similarity_threshold': self.graph_builder.similarity_threshold,
                     'max_evidence_sentences': self.graph_builder.max_sentences,
@@ -590,6 +625,7 @@ class MultiHopReasoner(nn.Module):
             num_heads=config['num_heads'],
             dropout=config['dropout'],
             use_onnx=use_onnx,
+            edge_dim=config.get('edge_dim', 32),
             **config['graph_config']
         )
         

@@ -95,12 +95,27 @@ class GATTrainer:
                 correct = 0
                 processed = 0
 
-                # Shuffle claims
+                # Implement Balanced Sampling
+                supports_claims = [c for c in claims if c.label == "SUPPORTS"]
+                refutes_claims = [c for c in claims if c.label == "REFUTES"]
+                nei_claims = [c for c in claims if c.label == "NOT_ENOUGH_INFO"]
+                
+                # Maximum number of samples per class in each balanced epoch
+                max_samples = len(supports_claims)
+                
+                # Create a balanced pool (oversample REFUTES and NEI)
                 import random
-                random.shuffle(claims)
+                balanced_claims = []
+                balanced_claims.extend(supports_claims)
+                if refutes_claims:
+                    balanced_claims.extend(random.choices(refutes_claims, k=max_samples))
+                if nei_claims:
+                    balanced_claims.extend(random.choices(nei_claims, k=max_samples))
+                
+                random.shuffle(balanced_claims)
 
                 from tqdm import tqdm
-                pbar = tqdm(claims, desc=f"Epoch {epoch}/{epochs}", leave=False)
+                pbar = tqdm(balanced_claims, desc=f"Epoch {epoch}/{epochs}", leave=False)
                 for claim in pbar:
                     if self.stop_requested:
                         break
