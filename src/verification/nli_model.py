@@ -53,6 +53,38 @@ class NLIModel:
         self.model.eval()
 
         print(f"NLI model loaded on {device}")
+        
+        # Initialize Persistent Cache
+        self.cache_dir = Path("data/cache")
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_file = self.cache_dir / "nli_predictions_cache.pkl"
+        self.cache = {}
+        self._load_cache()
+
+    def _load_cache(self):
+        """Load prediction cache from disk."""
+        if self.cache_file.exists():
+            try:
+                import pickle
+                with open(self.cache_file, 'rb') as f:
+                    self.cache = pickle.load(f)
+                print(f"Loaded {len(self.cache)} cached NLI predictions.")
+            except Exception as e:
+                print(f"Failed to load NLI cache: {e}")
+                self.cache = {}
+
+    def _save_cache(self):
+        """Save prediction cache to disk."""
+        try:
+            import pickle
+            with open(self.cache_file, 'wb') as f:
+                pickle.dump(self.cache, f)
+        except Exception as e:
+            print(f"Failed to save NLI cache: {e}")
+
+    def _get_cache_key(self, claim: str, evidence: str) -> str:
+        """Generate unique cache key."""
+        return f"{hash(claim)}||{hash(evidence)}"
 
     def _adjust_neutral_bias(self, label: str, confidence: float, prob_dict: Dict[str, float]) -> str:
         """

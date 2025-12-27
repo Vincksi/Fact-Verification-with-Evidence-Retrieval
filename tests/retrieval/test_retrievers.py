@@ -28,9 +28,23 @@ class TestDenseRetriever:
         
         corpus = {1: Mock(full_text="doc1"), 2: Mock(full_text="doc2")}
         retriever = DenseRetriever(corpus)
-        retriever.build_index()
         
-        mock_faiss.IndexFlatIP.assert_called_with(2)
+        # Mock Path and pickle to simulate cache miss
+        with patch('src.retrieval.dense_retriever.Path') as mock_path:
+            mock_path.return_value.mkdir.return_value = None
+            # cache_file.exists() -> False (force compute)
+            mock_path.return_value.__truediv__.return_value.exists.return_value = False
+            
+            retriever.build_index()
+            
+        # Updated to check for IndexHNSWFlat initialization
+        # IndexHNSWFlat takes (d, M, metric)
+        mock_faiss.IndexHNSWFlat.assert_called_with(2, 32, mock_faiss.METRIC_INNER_PRODUCT)
+        
+        # Verify efConstruction was set
+        mock_index_instance = mock_faiss.IndexHNSWFlat.return_value
+        assert mock_index_instance.hnsw.efConstruction == 40
+        
         assert len(retriever.doc_ids) == 2
 
     @patch('src.retrieval.dense_retriever.SentenceTransformer')

@@ -50,19 +50,68 @@ class DenseRetriever(BaseRetriever):
             self.doc_ids.append(doc_id)
             texts.append(doc.full_text)
 
-        # Encode documents in batches
-        print(f"Encoding {len(texts)} documents...")
-        self.embeddings = self.model.encode(
-            texts,
-            batch_size=self.batch_size,
-            show_progress_bar=True,
-            convert_to_numpy=True,
-            normalize_embeddings=True  # L2 normalization for cosine similarity
-        )
+        # Try to load cached embeddings first to save time
+        cache_dir = Path("data/cache")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file = cache_dir / f"embeddings_{self.model_name.replace('/', '_')}.pkl"
+        
+        embeddings_loaded = False
+        if cache_file.exists():
+            try:
+                print(f"Loading cached embeddings from {cache_file}...")
+                with open(cache_file, 'rb') as f:
+                    cache_data = pickle.load(f)
+                    
+                # Verify cache matches current corpus size/content (simplistic check)
+                if len(cache_data['doc_ids']) == len(self.doc_ids):
+                    self.embeddings = cache_data['embeddings']
+                    # Ensure doc_ids order matches cache, or re-align
+                    if self.doc_ids == cache_data['doc_ids']:
+                         embeddings_loaded = True
+                         print("Cached embeddings loaded successfully.")
+                    else:
+                        print("Cache doc_id mismatch. Recomputing...")
+                else:
+                    print(f"Cache size mismatch ({len(cache_data['doc_ids'])} vs {len(self.doc_ids)}). Recomputing...")
+            except Exception as e:
+                print(f"Failed to load cache: {e}")
 
-        # Build FAISS index (using inner product for normalized vectors = cosine similarity)
+        if not embeddings_loaded:
+            # Encode documents in batches
+            print(f"Encoding {len(texts)} documents...")
+            self.embeddings = self.model.encode(
+                texts,
+                batch_size=self.batch_size,
+                show_progress_bar=True,
+                convert_to_numpy=True,
+                normalize_embeddings=True  # L2 normalization for cosine similarity
+            )
+            
+            # Save to cache
+            print(f"Saving embeddings to cache: {cache_file}")
+            try:
+                with open(cache_file, 'wb') as f:
+                    pickle.dump({
+                        'doc_ids': self.doc_ids,
+                        'embeddings': self.embeddings
+                    }, f)
+            except Exception as e:
+                print(f"Failed to write cache: {e}")
+
+        # Build FAISS index using HNSW (Hierarchical Navigable Small World)
+        # HNSW provides O(log N) complexity vs O(N) for FlatIP
         embedding_dim = self.embeddings.shape[1]
-        self.index = faiss.IndexFlatIP(embedding_dim)  # Inner Product for normalized vectors
+        
+        # M is the number of neighbors for each node in the HNSW graph (higher = more memory/accuracy)
+        # ef_construction controls index build depth/quality
+        M = 32
+        self.index = faiss.IndexHNSWFlat(embedding_dim, M, faiss.METRIC_INNER_PRODUCT)
+        self.index.hnsw.efConstruction = 40  # Trade-off between build time and accuracy
+        
+        # Train not needed for simple HNSWFlat, but good practice to check
+        if not self.index.is_trained:
+            self.index.train(self.embeddings)
+            
         self.index.add(self.embeddings)
 
         print(f"Dense index built with {len(self.doc_ids)} documents (dim={embedding_dim})")
@@ -146,7 +195,8 @@ class DenseRetriever(BaseRetriever):
         index_file = path / 'faiss_index.bin'
         if not index_file.exists():
             raise FileNotFoundError(f"Index file not found: {index_file}")
-
+            
+        # faiss.read_index handles all index types (Flat, HNSW, etc.) automatically
         self.index = faiss.read_index(str(index_file))
 
         # Load metadata
