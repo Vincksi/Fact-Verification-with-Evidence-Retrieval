@@ -1,0 +1,43 @@
+# CPU-Friendly Fact Verification with Evidence Retrieval
+# Core NLP and ML
+
+sentence-transformers>=2.2.2      # Dense retrieval (CPU-friendly)
+transformers>=4.30.0              # NLI models
+torch>=2.0.0                      # PyTorch (CPU version)
+
+# Graph Neural Networks
+torch-geometric>=2.3.0            # GNN framework (CPU-compatible)
+torch-scatter>=2.1.0              # Scatter operations for PyG  
+torch-sparse>=0.6.17              # Sparse operations for PyG
+
+# NLP Tools
+spacy>=3.6.0                      # NER and preprocessing
+
+# Retrieval
+rank-bm25>=0.2.2                  # BM25 implementation
+faiss-cpu>=1.7.4                  # Vector search (CPU version)
+
+# Data processing
+datasets>=2.14.0                  # HuggingFace datasets
+pandas>=2.0.0                     # Data manipulation
+numpy>=1.24.0                     # Numerical operations
+scikit-learn>=1.3.0               # Metrics and utilities
+networkx>=3.1                     # Graph utilities
+
+# Utilities
+pyyaml>=6.0                       # Configuration
+tqdm>=4.65.0                      # Progress bars
+jsonlines>=3.1.0                  # JSONL file handling
+
+# Development
+pytest>=7.4.0                     # Testing
+pytest-cov>=4.1.0                 # Test coverage
+coverage>=7.0.0                   # Coverage reporting
+pylint>=3.0.0                     # Code quality and linting
+matplotlib>=3.7.0                 # Visualization
+seaborn>=0.12.0                   # Visualization
+fastapi>=0.68.0                   # Web framework
+uvicorn>=0.15.0                   # ASGI server
+python-multipart>=0.0.5           # File upload
+jinja2>=3.0.0                     # Templates
+groq>=0.5.0                       # LLM Explanations via Groq

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fact Verification Agent</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+    <div class="app-container">
+
+        <!-- SIDEBAR: CONFIGURATION -->
+        <aside class="sidebar">
+            <div class="brand">
+                <h1>FactAgent</h1>
+            </div>
+
+            <div class="config-section">
+                <h2>Retrieval</h2>
+
+                <div class="control-group">
+                    <label>Method</label>
+                    <select id="retrieval-method">
+                        <option value="dense">Dense (Neural)</option>
+                        <option value="bm25">BM25 (Keyword)</option>
+                        <option value="hybrid">Hybrid</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label>Top K Documents <span id="top-k-val" class="val-badge">10</span></label>
+                    <input type="range" id="top-k" min="1" max="50" value="10">
+                </div>
+
+                <div class="control-group hybrid-only" style="display:none;">
+                    <label>Dense Weight <span id="dense-w-val" class="val-badge">0.5</span></label>
+                    <input type="range" id="dense-weight" min="0" max="1" step="0.1" value="0.5">
+                </div>
+
+                <div class="control-group hybrid-only" style="display:none;">
+                    <label>BM25 Weight <span id="bm25-w-val" class="val-badge">0.5</span></label>
+                    <input type="range" id="bm25-weight" min="0" max="1" step="0.1" value="0.5">
+                </div>
+
+            </div>
+
+            <div class="config-section">
+                <h2>Verification</h2>
+
+                <div class="control-group">
+                    <label>Model</label>
+                    <div class="toggle-switch">
+                        <input type="radio" id="nli-mode" name="ver-mode" value="nli" checked>
+                        <label for="nli-mode">NLI</label>
+
+                        <input type="radio" id="gnn-mode" name="ver-mode" value="gnn">
+                        <label for="gnn-mode">GAT</label>
+
+                        <input type="radio" id="ensemble-mode" name="ver-mode" value="ensemble">
+                        <label for="ensemble-mode">Ensemble</label>
+                    </div>
+                </div>
+
+                <div id="nli-params">
+                    <div class="control-group">
+                        <label>Aggregation</label>
+                        <select id="agg-strategy">
+                            <option value="confidence_weighted">Confidence Weighted</option>
+                            <option value="max_confidence">Max Confidence</option>
+                            <option value="majority">Majority Vote</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- GNN Specific Parameters -->
+                <div id="gnn-params" style="display:none;">
+                    <div class="control-group">
+                        <label>Layers <span id="gnn-layers-val" class="val-badge">2</span></label>
+                        <input type="range" id="gnn-layers" min="1" max="6" value="2">
+                    </div>
+                    <div class="control-group">
+                        <label>Heads <span id="gnn-heads-val" class="val-badge">4</span></label>
+                        <input type="range" id="gnn-heads" min="1" max="8" value="4">
+                    </div>
+                    <div class="control-group">
+                        <label>Hidden Dim <span id="gnn-dim-val" class="val-badge">64</span></label>
+                        <select id="gnn-dim">
+                            <option value="32">32</option>
+                            <option value="64" selected>64</option>
+                            <option value="128">128</option>
+                            <option value="256">256</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Dropout <span id="gnn-drop-val" class="val-badge">0.1</span></label>
+                        <input type="range" id="gnn-dropout" min="0" max="0.5" step="0.1" value="0.1">
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Confidence Threshold <span id="conf-val" class="val-badge">0.5</span></label>
+                    <input type="range" id="threshold" min="0" max="1" step="0.05" value="0.5">
+                </div>
+            </div>
+
+            <button id="reset-btn" class="secondary-btn">Reset Defaults</button>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+
+            <div class="input-area">
+                <h2>Verify a Claim</h2>
+                <textarea id="claim-input"
+                    placeholder="Enter a scientific claim here... e.g., 'Aspirin reduces the risk of heart attack.'"></textarea>
+                <button id="verify-btn" class="primary-btn">Verify <span class="loader"
+                        style="display:none;"></span></button>
+            </div>
+
+
+            <!-- Existing Results Area -->
+            <div id="results-area" class="results-container hidden">
+
+                <div class="verdict-card" id="verdict-card">
+                    <div class="verdict-header">
+                        <span class="verdict-label">Prediction</span>
+                        <h1 id="prediction-text">SUPPORTS</h1>
+                    </div>
+                    <div class="confidence-meter">
+                        <div class="meter-bar">
+                            <div class="meter-fill" id="conf-fill" style="width: 0%"></div>
+                        </div>
+                        <span id="conf-text">98% Confidence</span>
+                    </div>
+                </div>
+
+                <!-- Analysis Charts -->
+                <div class="chart-section"
+                    style="background: rgba(30,41,59,0.5); padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; border: 1px solid var(--border-color);">
+                    <h3>Analysis Metrics</h3>
+                    <canvas id="scoresChart" style="max-height: 250px;"></canvas>
+                </div>
+
+                <!-- Graph Attention Visualization -->
+                <div id="graph-section" class="chart-section hidden"
+                    style="background: rgba(30,41,59,0.5); padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; border: 1px solid var(--border-color);">
+                    <h3>Graph Attention Map</h3>
+                    <div id="graph-viz-container" style="height: 400px; width: 100%; position: relative;">
+                        <!-- Graph will be rendered here -->
+                        <div id="graph-tooltip" style="display:none;"></div>
+                        <canvas id="graphCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- LLM Explanation Section -->
+                <div id="explanation-section" class="chart-section hidden"
+                    style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1)); padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; border: 1px solid rgba(139, 92, 246, 0.3);">
+                    <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+                        <h3 style="margin: 0;">AI Explanation</h3>
+                    </div>
+                    <div id="explanation-text"
+                        style="line-height: 1.6; color: var(--text-secondary); font-size: 0.95rem;"></div>
+                </div>
+
+                <div class="evidence-section">
+                    <h3>Evidence Found From Corpus</h3>
+                    <div id="evidence-list" class="evidence-list">
+                        <!-- Evidence Items injected by JS -->
+                    </div>
+                </div>
+
+                <div class="debug-section">
+                    <details>
+                        <summary>Retrieved Documents (Raw)</summary>
+                        <div id="docs-list" class="docs-list"></div>
+                    </details>
+                </div>
+
+            </div>
+
+        </main>
+
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+
+</html>

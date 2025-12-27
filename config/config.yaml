@@ -1,0 +1,67 @@
+# Data paths
+data:
+  scifact_dir: "data"
+  corpus_path: "data/corpus.jsonl"
+  claims_train: "data/claims_train.jsonl"
+  claims_dev: "data/claims_dev.jsonl"
+  claims_test: "data/claims_test.jsonl"
+  index_dir: "data/preprocessed/indices"
+  preprocessed_dir: "data/preprocessed"
+
+# Retrieval settings
+retrieval:
+  method: "hybrid"
+  top_k: 10
+  dense_model: "sentence-transformers/all-MiniLM-L6-v2"
+  batch_size: 32
+  
+  # Hybrid fusion parameters
+  bm25_weight: 0.5
+  dense_weight: 0.5
+
+# Verification settings
+verification:
+  nli_model: "cross-encoder/nli-deberta-v3-small"
+  aggregation: "fact_verification"
+  threshold: 0.5
+  batch_size: 16
+
+# Multi-hop reasoning with GNN
+multi_hop:
+  enabled: true
+  use_gnn: true  # Set to true to enable GNN-based multi-hop reasoning
+  
+  # Graph construction
+  graph:
+    max_evidence_sentences: 20  # Limit graph size for CPU efficiency
+    sentence_similarity_threshold: 0.6
+    edge_types: ["claim_evidence", "sentence_similarity", "entity_coref"]
+    use_entity_extraction: true
+  
+  # GNN architecture
+  gnn:
+    model_type: "GAT"
+    num_layers: 2
+    hidden_dim: 256
+    num_heads: 4
+    dropout: 0.1
+    aggregation: "mean"
+
+# Training (optional)
+training:
+  learning_rate: 2e-5
+  epochs: 10
+  warmup_steps: 100
+
+# Explanation generation
+explanation:
+  enabled: true  # Set to true to enable LLM explanations
+  provider: "groq"
+  model: "llama-3.3-70b-versatile"  # or "mixtral-8x7b-32768"
+  max_tokens: 512
+  temperature: 0.3
+
+# Evaluation
+evaluation:
+  retrieval_k: [1, 3, 5, 10, 20]
+  save_predictions: true

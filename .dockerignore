@@ -1,0 +1,32 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Virtual environment
+nlp_env/
+venv/
+env/
+
+# Data and models (usually mounted or downloaded during build)
+# Excluding large data to keep context small, but keeping structure
+# data/
+# models/
+
+# Build and IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific
+scripts/data/download_*.sh
+*.log
+faiss_index.bin
+dense_metadata.pkl

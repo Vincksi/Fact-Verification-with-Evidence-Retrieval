@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  fact-verification:
+    build: .
+    image: fact-verification-system:latest
+    container_name: fact-verification-app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      # Uncomment the next line to enable hot-reloading during development
+      # - ./src:/app/src
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+networks:
+  default:
+    name: fact-verification-network

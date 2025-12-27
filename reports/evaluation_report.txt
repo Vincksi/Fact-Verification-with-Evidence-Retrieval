@@ -1,0 +1,101 @@
+
+┌────────────────────────────────────────────────────────────────────┐
+│           FACT VERIFICATION SYSTEM - PERFORMANCE REPORT            │
+└────────────────────────────────────────────────────────────────────┘
+Loading pipeline from config/config.yaml...
+Initializing NLI-based verifier...
+Loading NLI model: cross-encoder/nli-deberta-v3-small
+NLI model loaded on cpu
+Loading corpus...
+Loading corpus from data/corpus.jsonl...
+Loaded 5183 documents
+Building hybrid retriever...
+Initializing BM25 retriever...
+Initializing dense retriever...
+Loading sentence transformer model: sentence-transformers/all-MiniLM-L6-v2
+BM25 index loaded from data/preprocessed/indices/bm25_index.pkl
+Dense index loaded from data/preprocessed/indices
+Hybrid index loaded from data/preprocessed/indices
+Retrieval index loaded successfully.
+Loading dev claims from data/claims_dev.jsonl...
+Loaded 300 dev claims
+Evaluating on 20 claims from 'dev' split...
+
+[1/20] Processing claim: 0-dimensional biomaterials show inductive properties....
+[5/20] Processing claim: A deficiency of vitamin B12 increases blood levels of homocy...
+[10/20] Processing claim: ALDH1 expression is associated with better breast cancer out...
+[15/20] Processing claim: Activation of PPM1D suppresses p53 function....
+[20/20] Processing claim: All hematopoietic stem cells segregate their chromosomes ran...
+
+┌────────────────────────────────────────────────────────────────────┐
+│                       RETRIEVAL PERFORMANCE                        │
+└────────────────────────────────────────────────────────────────────┘
+Metric               | Score     
+-----------------------------------
+Precision@1          | 0.6000
+Precision@3          | 0.2667
+Precision@5          | 0.1800
+Recall@1             | 0.6000
+Recall@3             | 0.7750
+Recall@5             | 0.8250
+Map                  | 0.6979
+Mrr                  | 0.7042
+
+┌────────────────────────────────────────────────────────────────────┐
+│                      VERIFICATION PERFORMANCE                      │
+└────────────────────────────────────────────────────────────────────┘
+
+============================================================
+                     End-to-End Metrics                     
+============================================================
+
+Overall Metrics:
+------------------------------------------------------------
+  accuracy                 : 0.4000
+  precision_macro          : 0.1333
+  recall_macro             : 0.3333
+  f1_macro                 : 0.1905
+  precision_micro          : 0.4000
+  recall_micro             : 0.4000
+  f1_micro                 : 0.4000
+  fever_score              : 0.4000
+
+Per-Class Metrics:
+------------------------------------------------------------
+
+  SUPPORTS:
+    precision      : 0.4000
+    recall         : 1.0000
+    f1             : 0.5714
+    support        : 8
+
+  REFUTES:
+    precision      : 0.0000
+    recall         : 0.0000
+    f1             : 0.0000
+    support        : 5
+
+  NOT_ENOUGH_INFO:
+    precision      : 0.0000
+    recall         : 0.0000
+    f1             : 0.0000
+    support        : 7
+============================================================
+
+
+Confusion Matrix:
+[[8 0 0]
+ [5 0 0]
+ [7 0 0]]
+
+┌────────────────────────────────────────────────────────────────────┐
+│                              SUMMARY                               │
+└────────────────────────────────────────────────────────────────────┘
+Total claims evaluated: 20
+Overall Accuracy:       0.4000
+FEVER Score:            0.4000
+Evidence Hit Rate:      0.8500
+
+Saved raw metrics to reports/metrics/metrics_20251227.json
+
+Saved text report to reports/evaluation_report.txt
