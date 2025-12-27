@@ -125,10 +125,11 @@ def update_verifier(pipeline: FactVerificationPipeline, config: VerificationConf
         else:
             pipeline.aggregator.strategy = config.aggregation_strategy
 
-    # We always re-init GNN if params change, checking strict equality is tricky
     # so we just re-init if using GNN or switching to it.
+    use_onnx = pipeline.config.get('optimization', {}).get('use_onnx', False)
+    
     if use_gnn:
-        print(f"Initializing GNN with layers={config.gnn_layers}, heads={config.gnn_heads}")
+        print(f"Initializing GNN with layers={config.gnn_layers}, heads={config.gnn_heads} (ONNX={use_onnx})")
         pipeline.use_gnn = True
         graph_config = pipeline.config['multi_hop']['graph']
         pipeline.verifier = MultiHopReasoner(
@@ -139,32 +140,33 @@ def update_verifier(pipeline: FactVerificationPipeline, config: VerificationConf
             dropout=config.gnn_dropout,
             similarity_threshold=graph_config['sentence_similarity_threshold'],
             max_sentences=graph_config['max_evidence_sentences'],
-            use_entities=graph_config['use_entity_extraction']
+            use_entities=graph_config['use_entity_extraction'],
+            use_onnx=use_onnx
         )
     elif pipeline.use_gnn:
         # Switch back to NLI
-        print("Switching back to NLI")
+        print(f"Switching back to NLI (ONNX={use_onnx})")
         pipeline.use_gnn = False
         pipeline.verifier = NLIModel(
             model_name=pipeline.config['verification']['nli_model'],
-            device='cpu'
+            device='cpu',
+            use_onnx=use_onnx
         )
         # Ensure aggregator is present
         if not hasattr(pipeline, 'aggregator') or pipeline.aggregator is None:
             pipeline.aggregator = EvidenceAggregator(strategy=config.aggregation_strategy)
     elif config.model_type == 'ensemble':
-        print("Initializing Ensemble Verifier")
+        print(f"Initializing Ensemble Verifier (ONNX={use_onnx})")
         # We need both models initialized
         # If NLI not there, init it
         if not isinstance(pipeline.verifier, NLIModel) and not pipeline.use_gnn:
-            nli = NLIModel(model_name=pipeline.config['verification']['nli_model'], device='cpu')
+            nli = NLIModel(model_name=pipeline.config['verification']['nli_model'], device='cpu', use_onnx=use_onnx)
         elif isinstance(pipeline.verifier, NLIModel):
             nli = pipeline.verifier
         else:
-            nli = NLIModel(model_name=pipeline.config['verification']['nli_model'], device='cpu')
+            nli = NLIModel(model_name=pipeline.config['verification']['nli_model'], device='cpu', use_onnx=use_onnx)
 
         # GNN
-        pipeline.config['multi_hop']['gnn']
         graph_config = pipeline.config['multi_hop']['graph']
         gnn = MultiHopReasoner(
             embedding_model=pipeline.config['retrieval']['dense_model'],
@@ -174,7 +176,8 @@ def update_verifier(pipeline: FactVerificationPipeline, config: VerificationConf
             dropout=config.gnn_dropout,
             similarity_threshold=graph_config['sentence_similarity_threshold'],
             max_sentences=graph_config['max_evidence_sentences'],
-            use_entities=graph_config['use_entity_extraction']
+            use_entities=graph_config['use_entity_extraction'],
+            use_onnx=use_onnx
         )
         pipeline.verifier = EnsembleVerifier(nli, gnn)
         pipeline.use_gnn = False  # Ensemble handles both

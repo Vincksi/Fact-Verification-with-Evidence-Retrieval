@@ -28,7 +28,8 @@ class GraphBuilder:
                  embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
                  similarity_threshold: float = 0.6,
                  max_sentences: int = 20,
-                 use_entities: bool = True):
+                 use_entities: bool = True,
+                 use_onnx: bool = False):
         """
         Initialize graph builder.
 
@@ -37,14 +38,24 @@ class GraphBuilder:
             similarity_threshold: Threshold for sentence similarity edges
             max_sentences: Maximum evidence sentences to include
             use_entities: Whether to extract and use entities
+            use_onnx: Whether to use ONNX runtime
         """
         self.similarity_threshold = similarity_threshold
         self.max_sentences = max_sentences
         self.use_entities = use_entities
+        self.use_onnx = use_onnx
 
         self.embedding_model = embedding_model
-        # Load embedding model
-        self.encoder = SentenceTransformer(embedding_model)
+        
+        if self.use_onnx:
+            from optimum.onnxruntime import ORTModelForFeatureExtraction
+            from transformers import AutoTokenizer
+            print(f"Loading ONNX Graph embedding model from: {embedding_model}")
+            self.encoder = ORTModelForFeatureExtraction.from_pretrained(embedding_model)
+            self.tokenizer = AutoTokenizer.from_pretrained(embedding_model)
+        else:
+            # Load embedding model
+            self.encoder = SentenceTransformer(embedding_model)
 
         # Load spaCy for entity extraction (if enabled)
         if use_entities:
@@ -53,6 +64,41 @@ class GraphBuilder:
             except OSError:
                 print("spaCy model not found. Run: python -m spacy download en_core_web_sm")
                 self.use_entities = False
+
+    def get_sentence_embedding_dimension(self) -> int:
+        """Get output dimension of embedding model."""
+        if self.use_onnx:
+            # Assume BERT-like model hidden size
+            return self.encoder.config.hidden_size
+        return self.encoder.get_sentence_embedding_dimension()
+
+    def _encode_texts(self, texts: List[str]) -> np.ndarray:
+        """Encode list of texts to embeddings."""
+        if not texts:
+            return np.array([])
+            
+        if self.use_onnx:
+            import torch
+            inputs = self.tokenizer(texts, padding=True, truncation=True, max_length=512, return_tensors="pt")
+            with torch.no_grad():
+                outputs = self.encoder(**inputs)
+            
+            # Mean pooling
+            token_embeddings = outputs.last_hidden_state
+            attention_mask = inputs.attention_mask
+            input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+            sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1)
+            sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+            embeddings = sum_embeddings / sum_mask
+            # Normalize
+            embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+            return embeddings.numpy()
+        else:
+             return self.encoder.encode(
+                texts,
+                convert_to_numpy=False,
+                normalize_embeddings=True
+            )
 
     def extract_entities(self, text: str) -> List[str]:
         """Extract named entities from text."""
@@ -70,24 +116,6 @@ class GraphBuilder:
                     doc_ids: Optional[List[int]] = None) -> Data:
         """
         Build a heterogeneous graph from claim and evidence.
-
-        Graph structure:
-        - Node 0: Claim
-        - Nodes 1 to N: Evidence sentences (limited to max_sentences)
-        - Nodes N+1 onwards: Entities (if enabled)
-
-        Edge types:
-        - claim_to_evidence: From claim to each evidence sentence
-        - sentence_similarity: Between similar evidence sentences
-        - entity_coref: From sentences/claim to their entities
-
-        Args:
-            claim: The claim text
-            evidence_sentences: List of evidence sentence texts
-            doc_ids: Optional list of document IDs for each sentence
-
-        Returns:
-            PyTorch Geometric Data object
         """
         # Limit number of evidence sentences for CPU efficiency
         if len(evidence_sentences) > self.max_sentences:
@@ -117,11 +145,9 @@ class GraphBuilder:
 
         # Encode all texts (claim + sentences + entities)
         all_texts = texts + entities
-        node_features = self.encoder.encode(
-            all_texts,
-            convert_to_numpy=False,
-            normalize_embeddings=True
-        )
+        
+        node_features = self._encode_texts(all_texts)
+        
         node_features = torch.tensor(np.array(node_features), dtype=torch.float)
 
         # Build edges
@@ -294,6 +320,7 @@ class MultiHopReasoner(nn.Module):
                  num_heads: int = 4,
                  dropout: float = 0.1,
                  num_classes: int = 3,  # SUPPORTS, REFUTES, NOT_ENOUGH_INFO
+                 use_onnx: bool = False,
                  **graph_config):
         """
         Initialize multi-hop reasoner.
@@ -305,20 +332,24 @@ class MultiHopReasoner(nn.Module):
             num_heads: Number of attention heads
             dropout: Dropout rate
             num_classes: Number of output classes
+            use_onnx: Whether to use ONNX runtime
             **graph_config: Configuration for GraphBuilder
         """
         super().__init__()
+        
+        self.use_onnx = use_onnx
 
         # Graph builder
         self.graph_builder = GraphBuilder(
             embedding_model=embedding_model,
             similarity_threshold=graph_config.get('sentence_similarity_threshold', 0.6),
             max_sentences=graph_config.get('max_evidence_sentences', 20),
-            use_entities=graph_config.get('use_entity_extraction', True)
+            use_entities=graph_config.get('use_entity_extraction', True),
+            use_onnx=use_onnx
         )
 
         # Get embedding dimension from model
-        input_dim = self.graph_builder.encoder.get_sentence_embedding_dimension()
+        input_dim = self.graph_builder.get_sentence_embedding_dimension()
 
         # GNN encoder
         self.gnn = GNNEncoder(
@@ -529,13 +560,15 @@ class MultiHopReasoner(nn.Module):
         print(f"Model saved to {path}")
 
     @classmethod
-    def load_model(cls, path: str, device: str = "cpu") -> 'MultiHopReasoner':
+    def load_model(cls, path: str, device: str = "cpu", use_onnx: bool = False, embedding_model: Optional[str] = None) -> 'MultiHopReasoner':
         """
         Load a model from disk.
 
         Args:
             path: Path to the saved model
             device: Device to load the model on
+            use_onnx: Whether to use ONNX runtime
+            embedding_model: Override the embedding model path from saved config
 
         Returns:
             Loaded MultiHopReasoner instance
@@ -546,13 +579,17 @@ class MultiHopReasoner(nn.Module):
         checkpoint = torch.load(path, map_location=device)
         config = checkpoint['config']
         
-        # Initialize model with saved config
+        # Override embedding model if provided
+        emb_model = embedding_model if embedding_model else config['embedding_model']
+        
+        # Initialize model with saved config (with potential overrides)
         instance = cls(
-            embedding_model=config['embedding_model'],
+            embedding_model=emb_model,
             hidden_dim=config['hidden_dim'],
             num_layers=config['num_layers'],
             num_heads=config['num_heads'],
             dropout=config['dropout'],
+            use_onnx=use_onnx,
             **config['graph_config']
         )
         
@@ -561,7 +598,7 @@ class MultiHopReasoner(nn.Module):
         instance.to(device)
         instance.eval()
         
-        print(f"Model loaded from {path}")
+        print(f"Model loaded from {path} (ONNX={use_onnx})")
         return instance
 
 def main():  # pragma: no cover

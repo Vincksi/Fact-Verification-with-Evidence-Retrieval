@@ -25,7 +25,7 @@ A CPU-friendly, 2-stage fact verification system that retrieves evidence from sc
 - Retrieval metrics: P@k, R@k, MAP, MRR, NDCG@k
 - Verification metrics: Accuracy, F1 (macro/micro/per-class)
 - FEVER score (joint retrieval + verification)
-- **92% test coverage** with 89 passing tests
+- **87% test coverage** with 89 passing tests
 
 ## Installation
 
@@ -231,10 +231,14 @@ multi_hop:
    - Lightweight architecture (2 layers, 256 hidden dim)
    - Efficient sparse operations with PyG
 
-3. **Indexing**:
-   - FAISS-CPU for fast similarity search
-   - Pre-computed embeddings
-   - Index persistence for reuse
+3. **Quantization & Runtime**:
+   - **ONNX Runtime (CPU)**: Models quantized to INT8 for 2-3x faster inference.
+   - **HNSW Indexing**: FAISS HNSW index for O(log N) retrieval speed.
+   - **Persistent Caching**: Embeddings and NLI results cached to disk.
+
+4. **Docker Optimization**:
+   - **Multi-stage builds**: Final image contains only runtime dependencies.
+   - **CPU-only Wheels**: Optimized PyTorch installation (no CUDA overhead).
 
 ## SciFact Dataset
 

@@ -9,20 +9,25 @@ data:
   preprocessed_dir: "data/preprocessed"
 
 # Retrieval settings
+optimization:
+  use_onnx: true
+
 retrieval:
-  method: "hybrid"
+  method: "hybrid"  # Options: bm25, dense, hybrid
   top_k: 10
-  dense_model: "sentence-transformers/all-MiniLM-L6-v2"
+  # dense_model: "sentence-transformers/all-MiniLM-L6-v2"  # Original
+  dense_model: "models/onnx/retrieval"  # ONNX optimized
   batch_size: 32
   
   # Hybrid fusion parameters
-  bm25_weight: 0.5
-  dense_weight: 0.5
+  bm25_weight: 0.3
+  dense_weight: 0.7
 
 # Verification settings
 verification:
-  nli_model: "cross-encoder/nli-deberta-v3-small"
-  aggregation: "fact_verification"
+  # nli_model: "cross-encoder/nli-deberta-v3-small"  # Original
+  nli_model: "models/onnx/nli"  # ONNX optimized
+  aggregation: "max_confidence"  # Options: max_confidence, majority_vote, weighted_sum
   threshold: 0.5
   batch_size: 16
 

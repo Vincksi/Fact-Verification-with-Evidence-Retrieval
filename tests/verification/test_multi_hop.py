@@ -44,7 +44,7 @@ class TestMultiHopReasoner:
         # Mock GraphBuilder instance
         mock_builder = Mock()
         mock_builder_cls.return_value = mock_builder
-        mock_builder.encoder.get_sentence_embedding_dimension.return_value = 10
+        mock_builder.get_sentence_embedding_dimension.return_value = 10
         
         # Mock Graph Data
         mock_data = Mock()
@@ -74,7 +74,7 @@ class TestMultiHopReasoner:
 
     def test_predict_no_evidence(self):
         with patch('src.verification.multi_hop_reasoner.GraphBuilder') as mb:
-            mb.return_value.encoder.get_sentence_embedding_dimension.return_value = 10
+            mb.return_value.get_sentence_embedding_dimension.return_value = 10
             reasoner = MultiHopReasoner(hidden_dim=4)
             
             label, conf, probs, graph_data = reasoner.predict("Claim", [])
@@ -86,7 +86,7 @@ class TestMultiHopReasoner:
     def test_train_step(self):
         with patch('src.verification.multi_hop_reasoner.GraphBuilder') as mb:
             # Setup bridge
-            mb.return_value.encoder.get_sentence_embedding_dimension.return_value = 10
+            mb.return_value.get_sentence_embedding_dimension.return_value = 10
             
             # Mock graph data
             mock_data = Mock()
@@ -111,7 +111,7 @@ class TestMultiHopReasoner:
         # Easier: Create instance with mocks
         
         with patch('src.verification.multi_hop_reasoner.GraphBuilder') as mb:
-            mb.return_value.encoder.get_sentence_embedding_dimension.return_value = 10
+            mb.return_value.get_sentence_embedding_dimension.return_value = 10
             real_reasoner = MultiHopReasoner(hidden_dim=4)
             
             # Mock predict method to isolate verify_with_evidence logic

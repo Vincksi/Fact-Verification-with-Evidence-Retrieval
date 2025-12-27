@@ -25,11 +25,12 @@ Here is a breakdown of the tests included in the project:
 - **`tests/retrieval/test_retrieval.py`**: Functional tests for the BM25 retriever (index building, search).
 - **`tests/retrieval/test_retrievers.py`**: Unit tests for `DenseRetriever` and `HybridRetriever` (initialization, retrieval logic).
 - **`tests/retrieval/test_bm25_extended.py`**: Specific tests for BM25 edge cases (tokenization, empty corpus) and persistence.
-- **`tests/retrieval/test_persistence.py`**: Verifies that retriever indices (Dense/Hybrid) can be saved to and loaded from disk correctly.
+- **`tests/retrieval/test_retrieval_persistence.py`**: Verifies that retriever indices (Dense/Hybrid) can be saved to and loaded from disk correctly.
 
 ### Verification System
 - **`tests/verification/test_nli_model.py`**: Unit tests for the NLI model (DeBERTa), mocking the Hugging Face pipeline to test entailment logic without heavy model loading.
 - **`tests/verification/test_multi_hop.py`**: Verification of the Graph Neural Network (GNN) reasoner and graph construction.
+- **`tests/verification/test_gnn_persistence.py`**: Verifies that trained GNN models can be saved and reloaded with ONNX compatibility.
 - **`tests/verification/test_verification.py`**: General verification logic tests.
 - **`tests/verification/test_aggregator_extended.py`**: Tests for evidence aggregation strategies (majority vote, confidence weighted, etc.).
 
@@ -220,7 +221,7 @@ test:
 
 1. **Naming**: `test_<function>_<scenario>.py`
 2. **Organization**: One test file per module
-3. **Target Coverage**: Aim for 80%+ for critical code
+3. **Target Coverage**: Aim for 85%+ for critical code (Current: **87%**)
 4. **Markers**: Use `@pytest.mark.slow` for slow tests
 
 ### Code Quality

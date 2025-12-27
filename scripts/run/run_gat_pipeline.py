@@ -37,7 +37,8 @@ def run_gat_pipeline():
         dropout=gnn_config['dropout'],
         similarity_threshold=graph_config['sentence_similarity_threshold'],
         max_sentences=graph_config['max_evidence_sentences'],
-        use_entities=graph_config['use_entity_extraction']
+        use_entities=graph_config['use_entity_extraction'],
+        use_onnx=pipeline.config.get('optimization', {}).get('use_onnx', False)
     )
     
     # 3. Load Data

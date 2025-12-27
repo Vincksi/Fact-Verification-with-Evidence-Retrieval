@@ -8,6 +8,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import os
 import yaml
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from src.data.dataset_loader import SciFactDataset
 from src.retrieval.base_retriever import BaseRetriever, RetrievalResult
@@ -72,30 +76,38 @@ class FactVerificationPipeline:
 
         if self.use_gnn:
             model_path = self.config['multi_hop']['gnn'].get('model_path', 'models/gat_model.pt')
-            
+            use_onnx = self.config.get('optimization', {}).get('use_onnx', False)
+            dense_model = self.config['retrieval']['dense_model']
+
             if os.path.exists(model_path):
                 print(f"Loading trained GNN model from {model_path}...")
-                self.verifier = MultiHopReasoner.load_model(model_path)
+                self.verifier = MultiHopReasoner.load_model(
+                    model_path, 
+                    use_onnx=use_onnx,
+                    embedding_model=dense_model
+                )
             else:
                 print(f"Initializing fresh GNN-based verifier (no saved model found at {model_path})...")
                 gnn_config = self.config['multi_hop']['gnn']
                 graph_config = self.config['multi_hop']['graph']
 
                 self.verifier = MultiHopReasoner(
-                    embedding_model=self.config['retrieval']['dense_model'],
+                    embedding_model=dense_model,
                     hidden_dim=gnn_config['hidden_dim'],
                     num_layers=gnn_config['num_layers'],
                     num_heads=gnn_config['num_heads'],
                     dropout=gnn_config['dropout'],
                     similarity_threshold=graph_config['sentence_similarity_threshold'],
                     max_sentences=graph_config['max_evidence_sentences'],
-                    use_entities=graph_config['use_entity_extraction']
+                    use_entities=graph_config['use_entity_extraction'],
+                    use_onnx=use_onnx
                 )
         else:
             print("Initializing NLI-based verifier...")
             self.verifier = NLIModel(
                 model_name=verification_config['nli_model'],
-                device='cpu'
+                device='cpu',
+                use_onnx=self.config.get('optimization', {}).get('use_onnx', False)
             )
 
         # Evidence aggregator (only for NLI mode)
@@ -144,7 +156,8 @@ class FactVerificationPipeline:
             self.retriever = DenseRetriever(
                 self.dataset.corpus,
                 model_name=self.config['retrieval']['dense_model'],
-                batch_size=self.config['retrieval']['batch_size']
+                batch_size=self.config['retrieval']['batch_size'],
+                use_onnx=self.config.get('optimization', {}).get('use_onnx', False)
             )
         elif method == 'hybrid':
             self.retriever = HybridRetriever(
@@ -152,7 +165,8 @@ class FactVerificationPipeline:
                 dense_model=self.config['retrieval']['dense_model'],
                 bm25_weight=self.config['retrieval']['bm25_weight'],
                 dense_weight=self.config['retrieval']['dense_weight'],
-                batch_size=self.config['retrieval']['batch_size']
+                batch_size=self.config['retrieval']['batch_size'],
+                use_onnx=self.config.get('optimization', {}).get('use_onnx', False)
             )
         else:
             raise ValueError(f"Unknown retrieval method: {method}")

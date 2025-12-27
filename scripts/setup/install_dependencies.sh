@@ -50,6 +50,9 @@ pip install uvicorn>=0.15.0
 pip install python-multipart>=0.0.5
 pip install jinja2>=3.0.0
 pip install groq>=0.5.0
+pip install optimum>=1.13.0
+pip install onnxruntime>=1.16.0
+pip install python-dotenv
 echo ""
 echo "=========================================="
 echo "Installation Complete!"

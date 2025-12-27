@@ -5,6 +5,8 @@ Natural Language Inference (NLI) model for claim verification.
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
+from pathlib import Path
+
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
@@ -35,24 +37,35 @@ class NLIModel:
         2: "NOT_ENOUGH_INFO"
     }
 
-    def __init__(self, model_name: str = "cross-encoder/nli-deberta-v3-small", device: str = "cpu"):
+    def __init__(self, model_name: str = "cross-encoder/nli-deberta-v3-small", device: str = "cpu", **kwargs):
         """
         Initialize NLI model.
 
         Args:
             model_name: HuggingFace model name
             device: Device to run on ("cpu" or "cuda")
+            **kwargs: Additional args (use_onnx=True/False)
         """
         self.model_name = model_name
         self.device = device
+        self.use_onnx = kwargs.get('use_onnx', False)
 
-        print(f"Loading NLI model: {model_name}")
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
-        self.model.to(device)
-        self.model.eval()
+        if self.use_onnx:
+            from optimum.onnxruntime import ORTModelForSequenceClassification
+            print(f"Loading ONNX NLI model from: {model_name}")
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self.model = ORTModelForSequenceClassification.from_pretrained(model_name)
+            # ORT models run on CPU by default.
+            if device != "cpu":
+                print("Warning: ONNX Runtime (CPU) selected but device is not cpu. Ignoring device.")
+        else:
+            print(f"Loading NLI model: {model_name}")
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
+            self.model.to(device)
+            self.model.eval()
 
-        print(f"NLI model loaded on {device}")
+        print(f"NLI model loaded (ONNX={self.use_onnx})")
         
         # Initialize Persistent Cache
         self.cache_dir = Path("data/cache")
@@ -128,6 +141,11 @@ class NLIModel:
         Returns:
             Tuple of (label, confidence, probabilities_dict)
         """
+        # Check cache
+        cache_key = self._get_cache_key(claim, evidence)
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+
         # Tokenize input
         inputs = self.tokenizer(
             claim,
@@ -157,7 +175,12 @@ class NLIModel:
         # Apply neutral bias correction
         label = self._adjust_neutral_bias(label, confidence, prob_dict)
 
-        return label, confidence, prob_dict
+        # Update cache
+        result = (label, confidence, prob_dict)
+        self.cache[cache_key] = result
+        self._save_cache()
+        
+        return result
 
     def predict_batch(self, claim: str, evidences: List[str],
                       batch_size: int = 16) -> List[Tuple[str, float, Dict[str, float]]]:
@@ -172,10 +195,26 @@ class NLIModel:
         Returns:
             List of (label, confidence, probabilities_dict) tuples
         """
-        results = []
+        results = [None] * len(evidences)
+        indices_to_compute = []
+        
+        # Check cache for all items
+        for i, evidence in enumerate(evidences):
+            cache_key = self._get_cache_key(claim, evidence)
+            if cache_key in self.cache:
+                results[i] = self.cache[cache_key]
+            else:
+                indices_to_compute.append(i)
+        
+        # If everything is cached, return immediately
+        if not indices_to_compute:
+            return results
+            
+        # Prepare batch for missing items
+        evidences_to_compute = [evidences[i] for i in indices_to_compute]
 
-        for i in range(0, len(evidences), batch_size):
-            batch_evidences = evidences[i:i + batch_size]
+        for i in range(0, len(evidences_to_compute), batch_size):
+            batch_evidences = evidences_to_compute[i:i + batch_size]
 
             # Tokenize batch
             inputs = self.tokenizer(
@@ -203,9 +242,22 @@ class NLIModel:
                     self.LABEL_MAP[k]: probs[j][k].item()
                     for k in range(len(probs[j]))
                 }
+                
+                # Apply bias correction
+                label = self._adjust_neutral_bias(label, confidence, prob_dict)
+                result = (label, confidence, prob_dict)
+                
+                # Store in results array at correct original index
+                original_idx = indices_to_compute[i + j]
+                results[original_idx] = result
+                
+                # Update cache
+                cache_key = self._get_cache_key(claim, evidences[original_idx])
+                self.cache[cache_key] = result
 
-                results.append((label, confidence, prob_dict))
-
+        # Save cache once after batch processing
+        self._save_cache()
+        
         return results
 
     def verify_with_evidence(self,

@@ -27,10 +27,22 @@ class DenseRetriever(BaseRetriever):
         super().__init__(corpus, **kwargs)
         self.model_name = model_name
         self.batch_size = kwargs.get('batch_size', 32)
+        self.use_onnx = kwargs.get('use_onnx', False)
 
-        print(f"Loading sentence transformer model: {model_name}")
-        self.model = SentenceTransformer(model_name)
-        self.model.eval()  # Set to evaluation mode
+        if self.use_onnx:
+            from optimum.onnxruntime import ORTModelForFeatureExtraction
+            from transformers import AutoTokenizer
+            
+            print(f"Loading ONNX model for retrieval from: {model_name}")
+            # Ensure we're loading from local directory if passing a path
+            self.model = ORTModelForFeatureExtraction.from_pretrained(model_name)
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            # ORTModel runs on CPU by default with standard runtime, no need for .to(device) explicitly like PyTorch
+            # unless using access to provider options, but for "cpu" it is default.
+        else:
+            print(f"Loading sentence transformer model: {model_name}")
+            self.model = SentenceTransformer(model_name)
+            self.model.eval()
 
         self.index = None
         self.doc_ids = []
@@ -79,13 +91,43 @@ class DenseRetriever(BaseRetriever):
         if not embeddings_loaded:
             # Encode documents in batches
             print(f"Encoding {len(texts)} documents...")
-            self.embeddings = self.model.encode(
-                texts,
-                batch_size=self.batch_size,
-                show_progress_bar=True,
-                convert_to_numpy=True,
-                normalize_embeddings=True  # L2 normalization for cosine similarity
-            )
+            
+            if self.use_onnx:
+                # ONNX Inference via Optimum
+                import torch
+                import numpy as np
+                
+                all_embeddings = []
+                for i in range(0, len(texts), self.batch_size):
+                    batch_texts = texts[i:i + self.batch_size]
+                    inputs = self.tokenizer(batch_texts, padding=True, truncation=True, max_length=512, return_tensors="pt")
+                    with torch.no_grad():
+                        outputs = self.model(**inputs)
+                    
+                    # Mean pooling (typical for sentence embeddings)
+                    # Attention mask needed for correct averaging
+                    token_embeddings = outputs.last_hidden_state
+                    attention_mask = inputs.attention_mask
+                    
+                    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+                    sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1)
+                    sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+                    batch_embeddings = sum_embeddings / sum_mask
+                    
+                    # Normalize
+                    batch_embeddings = torch.nn.functional.normalize(batch_embeddings, p=2, dim=1)
+                    all_embeddings.append(batch_embeddings.numpy())
+                
+                self.embeddings = np.vstack(all_embeddings)
+            else:
+                # Standard SentenceTransformer Inference
+                self.embeddings = self.model.encode(
+                    texts,
+                    batch_size=self.batch_size,
+                    show_progress_bar=True,
+                    convert_to_numpy=True,
+                    normalize_embeddings=True
+                )
             
             # Save to cache
             print(f"Saving embeddings to cache: {cache_file}")
@@ -130,12 +172,30 @@ class DenseRetriever(BaseRetriever):
         if self.index is None:
             raise ValueError("Index not built. Call build_index() first.")
 
-        # Encode query
-        query_embedding = self.model.encode(
-            [query],
-            convert_to_numpy=True,
-            normalize_embeddings=True
-        )
+        if self.use_onnx:
+            # ONNX Inference
+            import torch
+            inputs = self.tokenizer([query], padding=True, truncation=True, max_length=512, return_tensors="pt")
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+            
+            token_embeddings = outputs.last_hidden_state
+            attention_mask = inputs.attention_mask
+            
+            input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+            sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1)
+            sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+            query_embedding = sum_embeddings / sum_mask
+            
+            query_embedding = torch.nn.functional.normalize(query_embedding, p=2, dim=1)
+            query_embedding = query_embedding.numpy()
+        else:
+             # Encode query
+            query_embedding = self.model.encode(
+                [query],
+                convert_to_numpy=True,
+                normalize_embeddings=True
+            )
 
         # Search in FAISS index
         scores, indices = self.index.search(query_embedding, top_k)

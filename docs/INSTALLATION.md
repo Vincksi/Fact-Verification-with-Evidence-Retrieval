@@ -27,6 +27,11 @@ pip install torch>=2.0.0 --index-url https://download.pytorch.org/whl/cpu
 # Transformers and Sentence Transformers
 pip install transformers>=4.30.0
 pip install sentence-transformers>=2.2.2
+
+# Optimization & Utilities
+pip install optimum>=1.13.0
+pip install onnxruntime>=1.16.0
+pip install python-dotenv>=1.0.0
 ```
 
 ### 2. Install PyTorch Geometric
@@ -107,6 +112,20 @@ pip install faiss-cpu>=1.7.4
 ```
 
 Then set `use_gnn: false` in `config/config.yaml`.
+
+## Docker Installation (Recommended)
+
+The project includes an optimized **multi-stage Docker build** that uses CPU-only wheels for PyTorch, significantly reducing the image size.
+
+```bash
+# Build the optimized image
+docker build -t fact-verification-system .
+
+# Run the container
+docker run -p 8000:8000 fact-verification-system
+```
+
+For more details on Docker and Docker Compose setup, see [docker_setup.md](docker_setup.md).
 
 ## Verification
 

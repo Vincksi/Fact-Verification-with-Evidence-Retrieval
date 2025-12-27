@@ -5,7 +5,7 @@
 ### Test Coverage
 ```bash
 # Quick test with coverage
-./test_coverage.sh
+./scripts/quality/test_coverage.sh
 
 # View HTML report
 open htmlcov/index.html
@@ -14,7 +14,7 @@ open htmlcov/index.html
 ### Code Quality (Pylint)
 ```bash
 # Full quality check (tests + pylint)
-./run_quality_checks.sh
+./scripts/quality/run_quality_checks.sh
 
 # Pylint only
 pylint src/ --rcfile=.pylintrc
