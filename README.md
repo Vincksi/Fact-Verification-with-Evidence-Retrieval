@@ -113,7 +113,7 @@ bash scripts/run/start_web_ui.sh
 Then visit `http://localhost:8000` in your browser.
 
 > [!TIP]
-> For more details on the interface features (GAT graphs, training dashboard), see the [Web UI Guide](docs/web_ui.md).
+> For more details on the interface features (GAT graphs, etc.), see the [Web UI Guide](docs/web_ui.md).
 
 ## Project Structure
 
