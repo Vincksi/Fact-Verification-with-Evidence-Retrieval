@@ -154,7 +154,7 @@ We analyzed 105 error samples to understand the failure modes of CPU-optimized s
 - **Problem**: The model understands BRAF but fails to link "Apoptosis" (technical term) as the antonym of "Prevents cell death". This requires either deeper domain pre-training or external knowledge graph grounding.
 
 ### 5.3 Failure Modes Discussion
-The primary failure mode identified is the **"Similarity Trap"**. Because theStage 1 retriever is designed to find similar text, the Stage 2 verifier receives examples that are *always* semantically related. The model develops a false heuristic that "Technical Overlap = Logical Support". We mitigated this with **GATv2** and **Edge Type Embeddings**, but the results show that without explicit contradiction-aware pre-training, purely neural models still default to similarity when uncertain.
+The primary failure mode identified is the **"Similarity Trap"**. Because the Stage 1 retriever is designed to find similar text, the Stage 2 verifier receives examples that are *always* semantically related. The model develops a false heuristic that "Technical Overlap = Logical Support". We mitigated this with **GATv2** and **Edge Type Embeddings**, but the results show that without explicit contradiction-aware pre-training, purely neural models still default to similarity when uncertain.
 
 ---
 
