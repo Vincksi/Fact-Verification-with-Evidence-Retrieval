@@ -2,7 +2,7 @@
 
 **Author:** Kerrian Le Bars  
 **Date:** December 2025  
-**Institution:** Advanced NLP Lab  
+**Institution:** CentraleSupélec  
 **Subject:** 2-Stage Multi-Hop Reasoning with GATv2 and ONNX Acceleration
 
 ---
@@ -118,7 +118,7 @@ We performed a **one-tailed paired t-test** ($n=300$) on Recall@10 (BM25 vs. Hyb
 
 ---
 
-## 5. Comprehensive Error Analysis (2-Page Deep Dive)
+## 5. Comprehensive Error Analysis
 
 We analyzed 105 error samples to understand the failure modes of CPU-optimized scientific reasoning.
 
