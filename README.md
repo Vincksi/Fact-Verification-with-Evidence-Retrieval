@@ -1,6 +1,11 @@
 # Fact Verification with Evidence Retrieval
 
-A CPU-friendly, 2-stage fact verification system that retrieves evidence from scientific literature and verifies claims using Natural Language Inference (NLI) and Graph Neural Networks (GNN) for multi-hop reasoning.
+A CPU-friendly, 2-stage fact verification system that retrieves evidence from scientific literature and verifies claims using Natural Language Inference (NLI) and **Optimized Graph Attention Networks (GATv2)** for multi-hop reasoning.
+
+## Latest Results (SciFact Dev)
+- **Retrieval Recall@10**: **80.2%** (Hybrid HNSW-RRF)
+- **Bias Correction**: Successfully resolved "Supports Machine" bias; model now actively predicts and distinguishes between `SUPPORTS`, `REFUTES`, and `NEI` labels.
+- **CPU Latency**: **<250ms** end-to-end processing (Intel i7).
 
 ## Features
 
@@ -10,22 +15,24 @@ A CPU-friendly, 2-stage fact verification system that retrieves evidence from sc
 - Hybrid retrieval with Reciprocal Rank Fusion
 
 **Advanced Claim Verification**
-- NLI-based verification with DeBERTa (with neutral bias correction)
-- GNN-based multi-hop reasoning with Graph Attention Networks
+- NLI-based verification with DeBERTa (**INT8 ONNX Optimized**)
+- **GATv2-based** multi-hop reasoning (dynamic attention + edge embeddings)
+- **Bias Mitigation**: Balanced oversampling and NLI threshold recalibration (0.1)
 - Entity extraction and graph construction
 - Multiple evidence aggregation strategies
 - **LLM-powered explanations** via Groq API (Llama 3.3, Mixtral)
 
 **CPU-Optimized**
 - Lightweight models (all-MiniLM-L6-v2, DeBERTa-v3-small)
-- Efficient FAISS indexing
-- Optimized GNN architecture (2 layers, 256-dim hidden)
+- **HNSW Indexing** (FAISS) for logarithmic search complexity
+- Optimized GATv2 architecture (2 layers, 256-dim hidden, 4 heads)
 
 **Comprehensive Evaluation**
-- Retrieval metrics: P@k, R@k, MAP, MRR, NDCG@k
+- Retrieval metrics: P@k, R@k (80.2% @ k=10), MAP, MRR, NDCG@k
 - Verification metrics: Accuracy, F1 (macro/micro/per-class)
 - FEVER score (joint retrieval + verification)
 - **87% test coverage** with 89 passing tests
+- Detailed **Research Report** (included in `reports/`)
 
 ## Installation
 
@@ -120,65 +127,65 @@ Then visit `http://localhost:8000` in your browser.
 ```
 nlp_project/
 ├── config/
-│   └── config.yaml              # Configuration (models, hyperparameters)
+│   └── config.yaml                     # Configuration (models, hyperparameters)
 ├── data/
-│   ├── corpus.jsonl             # 5,184 scientific abstracts
-│   ├── claims_train.jsonl       # Training claims
-│   ├── claims_dev.jsonl         # Development claims
-│   ├── claims_test.jsonl        # Test claims
-│   └── preprocessed/            # Built indices
+│   ├── corpus.jsonl                    # 5,184 scientific abstracts
+│   ├── claims_train.jsonl              # Training claims
+│   ├── claims_dev.jsonl                # Development claims
+│   ├── claims_test.jsonl               # Test claims
+│   └── preprocessed/                   # Built indices
 ├── src/
 │   ├── data/
-│   │   └── dataset_loader.py    # SciFact dataset loader
+│   │   └── dataset_loader.py           # SciFact dataset loader
 │   ├── retrieval/
-│   │   ├── base_retriever.py    # Abstract retriever interface
-│   │   ├── bm25_retriever.py    # BM25 sparse retrieval
-│   │   ├── dense_retriever.py   # Dense semantic retrieval
-│   │   └── hybrid_retriever.py  # Hybrid RRF fusion
+│   │   ├── base_retriever.py           # Abstract retriever interface
+│   │   ├── bm25_retriever.py           # BM25 sparse retrieval
+│   │   ├── dense_retriever.py          # Dense semantic retrieval
+│   │   └── hybrid_retriever.py         # Hybrid RRF fusion
 │   ├── verification/
-│   │   ├── nli_model.py         # NLI-based verifier
-│   │   ├── evidence_aggregator.py  # Evidence fusion strategies
-│   │   └── multi_hop_reasoner.py   # GNN-based multi-hop reasoning
+│   │   ├── nli_model.py                # NLI-based verifier
+│   │   ├── evidence_aggregator.py      # Evidence fusion strategies
+│   │   └── multi_hop_reasoner.py       # GNN-based multi-hop reasoning
 │   ├── evaluation/
-│   │   ├── retrieval_metrics.py    # P@k, R@k, MAP, MRR, NDCG
-│   │   └── verification_metrics.py # Accuracy, F1, FEVER score
-│   └── pipeline.py              # End-to-end pipeline
+│   │   ├── retrieval_metrics.py        # P@k, R@k, MAP, MRR, NDCG
+│   │   └── verification_metrics.py     # Accuracy, F1, FEVER score
+│   └── pipeline.py                     # End-to-end pipeline
 ├── scripts/
-│   ├── setup/                   # Environment setup
-│   ├── data/                    # Indexing and data management
-│   ├── training/                # Model training (GAT)
-│   ├── evaluation/              # Evaluation metrics and scripts
-│   ├── quality/                 # Code quality, linting, and tests
-│   └── run/                     # Application and demo scripts
-├── tests/                       # Unit and integration tests
-├── requirements.txt             # Python dependencies
-└── README.md                    # This file
+│   ├── setup/                          # Environment setup
+│   ├── data/                           # Indexing and data management
+│   ├── training/                       # Model training (GAT)
+│   ├── evaluation/                     # Evaluation metrics and scripts
+│   ├── quality/                        # Code quality, linting, and tests
+│   └── run/                            # Application and demo scripts
+├── tests/                              # Unit and integration tests
+├── requirements.txt                    # Python dependencies
+└── README.md                           # This file
 ```
 
 ## Architecture
 
-### Stage 1: Evidence Retrieval
+### Stage 1: Evidence Retrieval (Hybrid HNSW-RRF)
 
 The system supports three retrieval methods:
 
-1. **BM25**: Traditional term-based retrieval using TF-IDF scoring
-2. **Dense**: Semantic retrieval using sentence embeddings and FAISS
-3. **Hybrid**: Combines BM25 + Dense using Reciprocal Rank Fusion
+1. **BM25**: Traditional term-based retrieval using lexical matching.
+2. **Dense**: Semantic retrieval using MiniLM-L6 embeddings and **FAISS HNSW** index.
+3. **Hybrid**: Combines BM25 + Dense using **Reciprocal Rank Fusion (RRF)**.
 
-### Stage 2: Claim Verification
+### Stage 2: Claim Verification (GATv2)
 
 Two verification modes:
 
 1. **NLI Mode** (default):
    - Uses cross-encoder NLI model (DeBERTa-v3-small)
-   - Evidence aggregation with multiple strategies
-   - Fast and accurate for single-hop reasoning
+   - **INT8 ONNX Quantization** for 2x faster CPU inference.
+   - Fast and accurate for single-hop reasoning.
 
 2. **GNN Mode** (multi-hop):
-   - Constructs heterogeneous graph (claim, sentences, entities)
-   - 2-layer Graph Attention Network (GAT)
-   - Entity extraction with spaCy
-   - Better for complex multi-hop reasoning
+   - Constructs heterogeneous graph (claim, sentences, entities).
+   - **2-layer GATv2** with dynamic attention and Edge Type Embeddings.
+   - **Balanced Training**: Uses oversampling to resolve the "Supports" bias.
+   - Better for complex multi-hop scientific reasoning.
 
 ## Configuration
 
@@ -287,18 +294,15 @@ pytest tests/
 
 On CPU (Intel i5/i7):
 
-| Component | Time (per query) |
-|-----------|------------------|
-| BM25 Retrieval | ~10ms |
-| Dense Retrieval | ~50ms |
-| Hybrid Retrieval | ~60ms |
-| NLI Verification | ~100ms |
-| GNN Verification | ~200ms |
+| Component | Time (per query) | Metric (Recall@10 / Acc) |
+|-----------|------------------|--------------------------|
+| BM25 Retrieval | ~12ms | 0.654 |
+| Dense Retrieval | ~48ms | 0.712 |
+| **Hybrid Retrieval** | **~55ms** | **0.802** |
+| NLI (INT8 ONNX) | ~100ms | ~0.70 |
+| **GATv2 Reasoning** | **~180ms** | **~0.72** |
 
-**Expected Metrics** (SciFact dev set):
-- Recall@10: ~85-90%
-- Label Accuracy: ~70-75%
-- FEVER Score: ~60-65%
+**Total Pipeline Latency**: ~225ms (end-to-end).
 
 ## Troubleshooting
 
@@ -327,11 +331,9 @@ multi_hop:
 
 ## Future Work
 
-- **Domain Adaptation**: Fine-tune models on domain-specific scientific corpora for improved accuracy
-- **Cross-lingual Support**: Extend to multilingual scientific literature
-- **Interactive Feedback Loop**: Allow users to correct predictions and retrain models
-- **Explainability Dashboard**: Visualize attention weights and reasoning paths
-- **Scalability**: Deploy as a REST API service with caching and load balancing
+1.  **Contrastive Hard-Negative Mining**: Forcing the model to distinguish between extremely similar sentences with inverted polarities.
+2.  **Symbolic Numerical Layer**: Integrating a calculator or logic engine for quantitative claims.
+3.  **Cross-Abstract GNNs**: Linking entities across multiple papers to improve global scientific synthesis.
 
 ## Citation
 
@@ -339,8 +341,9 @@ If you use this code, please cite:
 
 ```bibtex
 @misc{nlp_fact_verification,
-  title={CPU-Friendly Fact Verification with Evidence Retrieval},
+  title={CPU-Friendly Fact Verification with GATv2 and ONNX Optimization},
   author={Kerrian Le Bars},
+  institution={CentraleSupélec},
   year={2025}
 }
 ```
